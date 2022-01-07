@@ -23,12 +23,9 @@ type Novel struct {
 	Cover       string
 }
 
-func writeText(novel Novel) {
-	err := os.Remove((novel.Name + ".txt"))
-	if err != nil {
-		fmt.Println(err)
-	}
-	f, err := os.OpenFile((novel.Name + ".txt"), os.O_WRONLY|os.O_CREATE, 0600)
+func (novel Novel) toTxt(dest string) {
+	file_path := fmt.Sprintf("%s.txt", novel.Name)
+	f, err := os.OpenFile(file_path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
 	if err != nil {
 		panic(err)
 	}
@@ -36,7 +33,7 @@ func writeText(novel Novel) {
 	var text = ""
 	for _, chapter := range novel.Chapters {
 		text += chapter.Title
-		text += "\n"
+		text += "\n\n"
 		for _, paragraph := range chapter.paragraph {
 			text += paragraph
 		}
@@ -49,10 +46,8 @@ func writeText(novel Novel) {
 	}
 }
 
-func shuchengCrawler(first_page_link string) {
+func shuchengCrawler(first_page_link string, novel *Novel) {
 	domain := "www.51shucheng.net"
-	novel := Novel{}
-	novel.Chapters = make([]Chapter, 0)
 	chapter := Chapter{}
 
 	collector := colly.NewCollector(
@@ -89,14 +84,18 @@ func shuchengCrawler(first_page_link string) {
 
 	collector.OnHTML("#BookNext", func(element *colly.HTMLElement) {
 		next_page_link := strings.TrimSpace(element.Attr("href"))
-		r, _ := regexp.Compile(`(http|ftp|https):\\/\\/([\\w_-]+(?:(?:\\.[\\w_-]+)+))([\\w.,@?^=%&:\\/~+#-]*[\\w@?^=%&\\/~+#-])\\.html$`)
+		r, _ := regexp.Compile(`(http|https):\/\/.*.html$`)
 		log.Println("Link", chapter.Title, next_page_link, r.MatchString(next_page_link))
 		if r.MatchString(next_page_link) {
 			novel.Chapters = append(novel.Chapters, chapter)
+			if len(novel.Chapters) >= 10 {
+				novel.toTxt(os.Args[1])
+				novel.Chapters = nil
+				novel.Chapters = make([]Chapter, 0)
+			}
 			element.Request.Visit(next_page_link)
 		} else {
 			novel.Chapters = append(novel.Chapters, chapter)
-			writeText(novel)
 			log.Println("end")
 		}
 	})
@@ -105,5 +104,11 @@ func shuchengCrawler(first_page_link string) {
 }
 
 func main() {
-	shuchengCrawler("https://www.51shucheng.net/zh-tw/wangluo/xuezhonghandaoxing/50544.html")
+	novel := Novel{}
+	novel.Chapters = make([]Chapter, 0)
+	first_page_link := os.Args[1]
+	log.Println(first_page_link)
+	dest := os.Args[1]
+	shuchengCrawler(first_page_link, &novel)
+	novel.toTxt(dest)
 }
